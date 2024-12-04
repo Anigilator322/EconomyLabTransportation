@@ -11,30 +11,82 @@ namespace EconomyLabTransportation.Services
     public class RoutePlanner
     {
         private TransportationGraph _graph;
-        //private List<TransportNode> _nodes;
         private List<Car> _vehicles;
         private int _warehouseId;
+        public Dictionary<Car,int> VehicleInUsageTime = new Dictionary<Car, int>();
+
+        private int _maxVehicleInUsage = 9;
 
         public RoutePlanner(TransportationGraph graph, List<Car> vehicles, int warehouseId)
         {
             _graph = graph;
-            //_nodes = nodes;
             _vehicles = vehicles;
             _warehouseId = warehouseId;
+            foreach (Car vehicle in _vehicles)
+            {
+                VehicleInUsageTime.Add(vehicle, 0);
+            }
         }
 
-        private (Route,int) BuildRoute(List<TransportNode> nodes, int vehicleCapacity)
+        private TransportNode GetNearestNode(TransportNode origin, List<TransportNode> remainingNodes)
+        {
+            int distance = int.MaxValue;
+            TransportNode nearestNode = new TransportNode();
+            foreach (var node in remainingNodes)
+            {
+                if (_graph.GetDistance(origin.Id, node.Id) < distance)
+                {
+                    distance = _graph.GetDistance(origin.Id, node.Id);
+                    nearestNode = node;
+                }
+            }
+            return nearestNode;
+        }
+
+        private (Route,int) BuildRoute(List<TransportNode> nodes,Car vehicle,int vehicleCapacity)
         {
             var route = new Route(_warehouseId);
             int remainingCapacity = vehicleCapacity;
-
-            foreach (var node in nodes)
+            var remainingNodes = new List<TransportNode>(nodes);
+            while (remainingCapacity > 0 || remainingNodes.Count <= 1)
             {
-                if (node.Value <= remainingCapacity)
+                TransportNode nearestNode = GetNearestNode(_graph.Nodes[route.NodeIds[^1]], remainingNodes);
+                if (nearestNode.Id == 0)
+                    break; // Нет доступных точек
+                if (nearestNode.Value <= remainingCapacity) //Влезет груз
                 {
-                    route.NodeIds.Add(node.Id);
-                    remainingCapacity -= node.Value;
+                    if (VehicleInUsageTime[vehicle] > _maxVehicleInUsage * 60)
+                        break;
+                    route.NodeIds.Add(nearestNode.Id);
+                    remainingNodes.Remove(nearestNode);
+                    remainingCapacity -= nearestNode.Value;
                 }
+                else
+                {
+                    bool flag = true;
+                    foreach (var node in remainingNodes)
+                    {
+                        if(_graph.GetDistance(route.NodeIds[^1], node.Id) < 100000) //Существует путь
+                        {
+                            if (node.Value <= remainingCapacity)
+                            {
+                                flag = false;
+                                route.NodeIds.Add(node.Id);
+                                remainingNodes.Remove(node);
+                                remainingCapacity -= node.Value;
+                                break;
+                            }
+                        }
+                    }
+                    if(flag)
+                        break;
+                }
+                if (VehicleInUsageTime[vehicle] > _maxVehicleInUsage * 60)
+                {
+                    route.NodeIds.RemoveAt(route.NodeIds.Count - 1); // Если превышено время использования машины, то просто возвращаемся
+                    break;
+                }
+
             }
 
             route.NodeIds.Add(_warehouseId); // Вернуться на склад
@@ -47,6 +99,7 @@ namespace EconomyLabTransportation.Services
             var routes = new List<Route>();
             var remainingNodes = new List<TransportNode>(_graph.Nodes);
             remainingNodes.RemoveAll(node => node.Id == _warehouseId); // Удалить склад из списка
+            var allowedVehicles = new List<Car>(_vehicles);
 
             while (remainingNodes.Count > 0)
             {
@@ -55,9 +108,9 @@ namespace EconomyLabTransportation.Services
                 Car bestVehicle = null;
                 int minCost = int.MaxValue;
 
-                foreach (var vehicle in _vehicles)
+                foreach (var vehicle in allowedVehicles)
                 {
-                    var currentRoute = BuildRoute(remainingNodes, vehicle.Capacity);
+                    var currentRoute = BuildRoute(remainingNodes,vehicle, vehicle.Capacity);
                     if (currentRoute.Item1.NodeIds.Count > 0)
                     {
                         int cost = CalculateCosts(currentRoute.Item1, vehicle);
@@ -70,7 +123,8 @@ namespace EconomyLabTransportation.Services
                         }
                     }
                 }
-
+                
+                
                 // Удалить обслуженные точки
                 foreach (var nodeId in bestRoute.NodeIds)
                 {
@@ -79,6 +133,12 @@ namespace EconomyLabTransportation.Services
                 bestRoute.VehicleId = bestVehicle.Id;
                 bestRoute.Cost = minCost;
                 bestRoute.Time = CalculateTime(bestRoute);
+                VehicleInUsageTime[bestVehicle] += bestRoute.Time;
+                if(VehicleInUsageTime[bestVehicle] > _maxVehicleInUsage * 60)
+                {
+                    allowedVehicles.Remove(bestVehicle);
+                }
+                //allowedVehicles.Remove(bestVehicle);
                 routes.Add(bestRoute);
             }
 
@@ -132,7 +192,7 @@ namespace EconomyLabTransportation.Services
             return routes;
         }*/
 
-        private int CalculateCosts(Route route, Car car)
+        public int CalculateCosts(Route route, Car car)
         {
             int cost = car.Cost;
             if((((int)Math.Ceiling((double)CalculateTime(route) / 60)) - car.RentTime) > 0)
@@ -140,7 +200,7 @@ namespace EconomyLabTransportation.Services
             return cost;
         }
 
-        private int CalculateTime(Route route)
+        public int CalculateTime(Route route)
         {
             int val = 0;
             int s = 0;

@@ -17,5 +17,11 @@ namespace EconomyLabTransportation.Models
         {
             NodeIds.Add(warehouseId);
         }
+
+        public Route(List<int> nodeIds, int vehicleId)
+        {
+            NodeIds = nodeIds;
+            VehicleId = vehicleId;
+        }
     }
 }
