@@ -55,8 +55,6 @@ namespace EconomyLabTransportation.Services
                     break; // Нет доступных точек
                 if (nearestNode.Value <= remainingCapacity) //Влезет груз
                 {
-                    if (VehicleInUsageTime[vehicle] > _maxVehicleInUsage * 60)
-                        break;
                     route.NodeIds.Add(nearestNode.Id);
                     remainingNodes.Remove(nearestNode);
                     remainingCapacity -= nearestNode.Value;
@@ -81,15 +79,20 @@ namespace EconomyLabTransportation.Services
                     if(flag)
                         break;
                 }
-                if (VehicleInUsageTime[vehicle] > _maxVehicleInUsage * 60)
+                if (VehicleInUsageTime[vehicle] + CalculateTime(route) > _maxVehicleInUsage * 60)
                 {
                     route.NodeIds.RemoveAt(route.NodeIds.Count - 1); // Если превышено время использования машины, то просто возвращаемся
                     break;
                 }
 
             }
-
+            //VehicleInUsageTime[vehicle] += CalculateTime(route);
             route.NodeIds.Add(_warehouseId); // Вернуться на склад
+            foreach(var node in route.NodeIds)
+            {
+                if (node != 0)
+                    route.DeliveredStaff += _graph.Nodes[node].Value;
+            }
             return (route, remainingCapacity);
         }
 
@@ -111,9 +114,9 @@ namespace EconomyLabTransportation.Services
                 foreach (var vehicle in allowedVehicles)
                 {
                     var currentRoute = BuildRoute(remainingNodes,vehicle, vehicle.Capacity);
-                    if (currentRoute.Item1.NodeIds.Count > 0)
+                    if (currentRoute.Item1.NodeIds.Count > 2)
                     {
-                        int cost = CalculateCosts(currentRoute.Item1, vehicle);
+                        int cost = CalculateCosts(currentRoute.Item1, vehicle) - currentRoute.Item1.DeliveredStaff * 300;
 
                         if (cost < minCost)
                         {
@@ -131,7 +134,7 @@ namespace EconomyLabTransportation.Services
                     remainingNodes.RemoveAll(node => node.Id == nodeId);
                 }
                 bestRoute.VehicleId = bestVehicle.Id;
-                bestRoute.Cost = minCost;
+                bestRoute.Cost = CalculateCosts(bestRoute,bestVehicle);
                 bestRoute.Time = CalculateTime(bestRoute);
                 VehicleInUsageTime[bestVehicle] += bestRoute.Time;
                 if(VehicleInUsageTime[bestVehicle] > _maxVehicleInUsage * 60)
@@ -144,53 +147,6 @@ namespace EconomyLabTransportation.Services
 
             return routes;
         }
-
-
-        /*public List<Route> PlanRoutes()
-        {
-            var routes = new List<Route>();
-            var remainingNodes = new List<TransportNode>(_graph.Nodes);
-            remainingNodes.RemoveAll(node => node.Id == _warehouseId); // Удалить склад из списка
-
-            foreach (var vehicle in _vehicles)
-            {
-                var currentRoute = new Route(_warehouseId, vehicle.Id);
-                int currentCapacity = vehicle.Capacity;
-
-                while (remainingNodes.Count > 0)
-                {
-                    // Найти ближайшую точку, которую можно обслужить
-                    TransportNode nearestNode = null;
-                    double nearestDistance = double.MaxValue;
-
-                    foreach (var node in remainingNodes)
-                    {
-                        double distance = _graph.GetDistance(currentRoute.NodeIds[^1], node.Id);
-                        if (distance < nearestDistance && node.Value <= currentCapacity)
-                        {
-                            nearestNode = node;
-                            nearestDistance = distance;
-                        }
-                    }
-
-                    if (nearestNode == null)
-                        break; // Больше точек не обслужить
-
-                    // Добавить точку в маршрут
-                    currentRoute.NodeIds.Add(nearestNode.Id);
-                    currentCapacity -= nearestNode.Value;
-                    remainingNodes.Remove(nearestNode);
-                }
-
-                // Завершить маршрут возвратом на склад
-                currentRoute.NodeIds.Add(_warehouseId);
-                currentRoute.Cost = CalculateCosts(currentRoute);
-                currentRoute.Time = CalculateTime(currentRoute);
-                routes.Add(currentRoute);
-            }
-
-            return routes;
-        }*/
 
         public int CalculateCosts(Route route, Car car)
         {

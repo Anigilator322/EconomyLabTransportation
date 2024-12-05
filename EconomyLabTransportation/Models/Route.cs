@@ -12,6 +12,7 @@ namespace EconomyLabTransportation.Models
         public int Cost { get; set; }
         public int Time { get; set; }
         public int VehicleId { get; set; }
+        public int DeliveredStaff { get; set; }
 
         public Route(int warehouseId)
         {
