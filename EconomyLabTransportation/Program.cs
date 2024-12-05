@@ -18,22 +18,19 @@ namespace EconomyLabTransportation
             var routes = planner.PlanRoutes();
             int totalTime = 0;
             int totalCost = 0;
-            foreach (var route in routes)
+            foreach (var route in routes.Routes)
             {
                 totalTime += route.Time;
                 totalCost += route.Cost;
                 Console.Write("Vehicle: " + route.VehicleId +" Route time in mins: "+route.Time+" Route cost: "+route.Cost +" Route: ");
                 Console.WriteLine(string.Join(" -> ", route.NodeIds));
             }
+            foreach (var vehicle in routes.VehicleInUsageTime)
+            {
+                Console.WriteLine("Vehicle: " + vehicle.Key.Id + " Time in usage: " + vehicle.Value);
+            }
             Console.WriteLine("Total time: " + totalTime);
             Console.WriteLine("Total cost: " + totalCost);
-
-            //Console.WriteLine("VRP Solver");
-            
-            //DataModel dataModel = new DataModel(graph, vehicles);
-            //var solver = new VRPSolver();
-            //solver.SolveVRP(dataModel);
-
 
         }
     }

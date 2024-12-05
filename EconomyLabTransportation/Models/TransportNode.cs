@@ -10,13 +10,6 @@ namespace EconomyLabTransportation.Models
     {
         public int Id { get; set; }
         public int Value { get; set; }
-        public string Type { get; set; }
-
-        /*public TransportNode(int id, int needs, TransportNodeType type)
-        {
-            ID = id;
-            Value = needs;
-            Type = type;
-        }*/
+        public string Type { get; set; } = string.Empty;
     }
 }
