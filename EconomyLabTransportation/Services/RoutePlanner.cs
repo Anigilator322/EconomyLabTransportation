@@ -13,8 +13,8 @@ namespace EconomyLabTransportation.Services
         private TransportationGraph _graph;
         private List<Car> _vehicles;
         private int _warehouseId;
-        public Dictionary<Car,int> VehicleInUsageTime = new Dictionary<Car, int>();
-
+        //public Dictionary<Car,int> VehicleInUsageTime = new Dictionary<Car, int>();
+        public int BestCoef = 1;
         private int _maxVehicleInUsage = 9;
 
         public RoutePlanner(TransportationGraph graph, List<Car> vehicles, int warehouseId)
@@ -22,10 +22,10 @@ namespace EconomyLabTransportation.Services
             _graph = graph;
             _vehicles = vehicles;
             _warehouseId = warehouseId;
-            foreach (Car vehicle in _vehicles)
+            /*foreach (Car vehicle in _vehicles)
             {
                 VehicleInUsageTime.Add(vehicle, 0);
-            }
+            }*/
         }
 
         private TransportNode GetNearestNode(TransportNode origin, List<TransportNode> remainingNodes)
@@ -42,12 +42,13 @@ namespace EconomyLabTransportation.Services
             }
             return nearestNode;
         }
-
-        private (Route,int) BuildRoute(List<TransportNode> nodes,Car vehicle,int vehicleCapacity)
+        //Жадный алгоритм. Строит маршрут для одной машины по самым ближайшим точкам
+        private (Route,int) BuildRoute(List<TransportNode> nodes,Car vehicle,int vehicleRemCapacity, Dictionary<Car,int> VehicleInUsageTime)
         {
             var route = new Route(_warehouseId);
-            int remainingCapacity = vehicleCapacity;
+            int remainingCapacity = vehicleRemCapacity;
             var remainingNodes = new List<TransportNode>(nodes);
+
             while (remainingCapacity > 0 || remainingNodes.Count <= 1)
             {
                 TransportNode nearestNode = GetNearestNode(_graph.Nodes[route.NodeIds[^1]], remainingNodes);
@@ -99,53 +100,68 @@ namespace EconomyLabTransportation.Services
 
         public List<Route> PlanRoutes()
         {
-            var routes = new List<Route>();
-            var remainingNodes = new List<TransportNode>(_graph.Nodes);
-            remainingNodes.RemoveAll(node => node.Id == _warehouseId); // Удалить склад из списка
-            var allowedVehicles = new List<Car>(_vehicles);
+            var bestRoutes = new List<Route>();
+            var bestTotalCost = int.MaxValue;
 
-            while (remainingNodes.Count > 0)
+            for (int i = 1; i < 1000; i+=1)
             {
-                // Построить маршрут для текущего набора оставшихся точек
-                var bestRoute = new Route(_warehouseId);
-                Car bestVehicle = null;
-                int minCost = int.MaxValue;
-
-                foreach (var vehicle in allowedVehicles)
+                var routes = new List<Route>();
+                var remainingNodes = new List<TransportNode>(_graph.Nodes);
+                remainingNodes.RemoveAll(node => node.Id == _warehouseId); // Удалить склад из списка
+                var allowedVehicles = new List<Car>(_vehicles);
+                Dictionary<Car, int> VehicleInUsageTime = new Dictionary<Car, int>();
+                foreach (Car vehicle in _vehicles)
                 {
-                    var currentRoute = BuildRoute(remainingNodes,vehicle, vehicle.Capacity);
-                    if (currentRoute.Item1.NodeIds.Count > 2)
-                    {
-                        int cost = CalculateCosts(currentRoute.Item1, vehicle) - currentRoute.Item1.DeliveredStaff * 300;
+                    VehicleInUsageTime.Add(vehicle, 0);
+                }
 
-                        if (cost < minCost)
+                while (remainingNodes.Count > 0)
+                {
+                    // Построить маршрут для текущего набора оставшихся точек
+                    var bestRoute = new Route(_warehouseId);
+                    Car bestVehicle = null;
+                    int minCost = int.MaxValue;
+                    foreach (var vehicle in allowedVehicles)
+                    {
+                        var currentRoute = BuildRoute(remainingNodes, vehicle, vehicle.Capacity, VehicleInUsageTime);
+                        if (currentRoute.Item1.NodeIds.Count > 2)
                         {
-                            minCost = cost;
-                            bestRoute = currentRoute.Item1;
-                            bestVehicle = vehicle;
+                            int cost = CalculateCosts(currentRoute.Item1, vehicle) - currentRoute.Item1.DeliveredStaff * i;
+
+                            if (cost < minCost)
+                            {
+                                minCost = cost;
+                                bestRoute = currentRoute.Item1;
+                                bestVehicle = vehicle;
+                            }
                         }
                     }
+
+                    // Удалить обслуженные точки
+                    foreach (var nodeId in bestRoute.NodeIds)
+                    {
+                        remainingNodes.RemoveAll(node => node.Id == nodeId);
+                    }
+                    bestRoute.VehicleId = bestVehicle.Id;
+                    bestRoute.Cost = CalculateCosts(bestRoute, bestVehicle);
+                    bestRoute.Time = CalculateTime(bestRoute);
+                    VehicleInUsageTime[bestVehicle] += bestRoute.Time;
+                    if (VehicleInUsageTime[bestVehicle] > _maxVehicleInUsage * 60)
+                    {
+                        allowedVehicles.Remove(bestVehicle);
+                    }
+                    routes.Add(bestRoute);
                 }
-                
-                
-                // Удалить обслуженные точки
-                foreach (var nodeId in bestRoute.NodeIds)
+                if(bestTotalCost > routes.Sum(route => route.Cost))
                 {
-                    remainingNodes.RemoveAll(node => node.Id == nodeId);
+                    bestTotalCost = routes.Sum(route => route.Cost);
+                    bestRoutes = new List<Route>(routes);
+                    BestCoef = i;
+                    Console.WriteLine("Best coef: " + BestCoef);
                 }
-                bestRoute.VehicleId = bestVehicle.Id;
-                bestRoute.Cost = CalculateCosts(bestRoute,bestVehicle);
-                bestRoute.Time = CalculateTime(bestRoute);
-                VehicleInUsageTime[bestVehicle] += bestRoute.Time;
-                if(VehicleInUsageTime[bestVehicle] > _maxVehicleInUsage * 60)
-                {
-                    allowedVehicles.Remove(bestVehicle);
-                }
-                //allowedVehicles.Remove(bestVehicle);
-                routes.Add(bestRoute);
             }
 
-            return routes;
+            return bestRoutes;
         }
 
         public int CalculateCosts(Route route, Car car)
