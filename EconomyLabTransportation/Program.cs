@@ -31,6 +31,8 @@ namespace EconomyLabTransportation
             }
             Console.WriteLine("Total time: " + totalTime);
             Console.WriteLine("Total cost: " + totalCost);
+            Console.WriteLine("Press any key to exit");
+            Console.ReadKey();
 
         }
     }
