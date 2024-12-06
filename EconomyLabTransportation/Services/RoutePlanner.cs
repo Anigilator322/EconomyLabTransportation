@@ -174,7 +174,7 @@ namespace EconomyLabTransportation.Services
             {
                 s += _graph.GetDistance(route.NodeIds[i], route.NodeIds[i + 1]);
             }
-            int time = 10 * (route.NodeIds.Count - 1) + 5 * (route.NodeIds.Count - 2) + 10 * (val) + 2*(s);
+            int time = 10 * (route.NodeIds.Count - 1) + 15 * (route.NodeIds.Count - 2) + 10 * (val) + 2*(s);
             return time;
         }
     }
